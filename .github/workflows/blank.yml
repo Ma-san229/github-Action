@@ -1,0 +1,164 @@
+ci_cd:
+  # GitHub ActionsによるCI/CDパイプライン（プルリクエストごとのビルド・テストやIssue自動ラベル付けなど)0
+  purpose: "コードの品質を保つため、プッシュやPRごとに自動でビルド・テストを実行するワークフロー"
+  triggers:
+    - push (mainブランチへのプッシュ時)
+    - pull_request (プルリクエスト作成・更新時)
+  jobs:
+    - name: "Build and Test"  # ビルド・テストジョブ
+      steps:
+        - name: "Checkout code"  # リポジトリのコードをチェックアウト
+          uses: "actions/checkout@v4"
+        - name: "Set up Python"  # Python環境のセットアップ（例: バージョン指定可）
+          uses: "actions/setup-python@v4"
+        # - name: "Install dependencies"（依存関係のインストールなどのrunコマンドが入る想定）
+        # - name: "Run tests"（テストスクリプト実行のrunコマンドが入る想定）
+        - name: "Upload Test Results"  # （テスト結果アップロードなど必要に応じたステップ）
+          uses: "actions/upload-artifact@v3"  # テスト結果や成果物の保存（必要に応じて）
+
+pr_review_automation:
+  # プルリクエストのコード変更をAI（Claude）で自動レビューするワークフロー1
+  purpose: "プルリクエストの内容をAIが解析し、自動でコードレビューコメントを提供する"
+  triggers:
+    - pull_request (プルリクエストのオープン時やリオープン時)
+  jobs:
+    - name: "AI Code Review"  # AIコードレビュージョブ
+      runs-on: "ubuntu-latest"
+      permissions:
+        pull-requests: write   # PRへコメント/レビューを書く権限2
+        contents: read         # コード内容の読み取り権限（必要に応じて）
+      steps:
+        - name: "Checkout code"  # コードをチェックアウトしてAIが閲覧可能に
+          uses: "actions/checkout@v4"
+        - name: "Set up Bun runtime"  # Claude実行環境（Bun）のセットアップ
+          uses: "oven-sh/setup-bun@v2"
+        - name: "Run Claude Code Action (PR Review)"  # Claudeによる自動コードレビュー実行
+          uses: "anthropics/claude-code-action@v1"
+          with:
+            anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}  # Claude APIキー(シークレット管理)
+            github_token: ${{ secrets.GITHUB_TOKEN }}           # GitHubトークン（自動付与）
+            # 他に必要に応じて設定（例: トリガーフレーズやモード設定）
+
+issue_processing_automation:
+  # 新規IssueをAIで自動分類・対応（ラベル付与や回答提案など）するワークフロー3
+  purpose: "作成されたIssueの分類や対応を自動化し、必要に応じてAIがラベル付けや回答支援を行う"
+  triggers:
+    - issues (新しいIssueの作成時、または割り当て時など)
+    # - issue_comment (Issueへのコメントで@claude言及時など、必要なら追加)
+  jobs:
+    - name: "AI Issue Triage"  # AIによるIssueトリアージジョブ
+      runs-on: "ubuntu-latest"
+      permissions:
+        issues: write        # Issueへコメントやラベル付与を行う権限4
+        contents: read       # リポジトリ内容を参照する権限（問題内容に応じコード参照時）
+      steps:
+        - name: "Checkout code"  # コードをチェックアウト（Issue内容に関連するコード確認のため）
+          uses: "actions/checkout@v4"
+        - name: "Set up Bun runtime"  # Claude実行環境のセットアップ（Bun）
+          uses: "oven-sh/setup-bun@v2"
+        - name: "Run Claude Code Action (Issue Processing)"  # ClaudeによるIssue処理実行
+          uses: "anthropics/claude-code-action@v1"
+          with:
+            anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+            github_token: ${{ secrets.GITHUB_TOKEN }}
+            # （例: 特定ラベル付与や返信テンプレートのプロンプト設定が可能）
+
+documentation_generation:
+  # コード変更に応じてドキュメントを自動生成・更新するワークフロー5
+  purpose: "リポジトリ内のドキュメント（YAML/Markdown）をコード変更に合わせ自動更新する"
+  triggers:
+    - push (mainブランチへのプッシュ時にドキュメント更新)
+    # - schedule (定期実行によるドキュメントチェックも可能)
+  jobs:
+    - name: "Generate Docs"  # ドキュメント自動生成ジョブ
+      runs-on: "ubuntu-latest"
+      permissions:
+        contents: write   # リポジトリ内容の更新権限（生成したドキュメントをコミットするため）
+      steps:
+        - name: "Checkout code"  # リポジトリのコードをチェックアウト
+          uses: "actions/checkout@v4"
+        - name: "Set up Python"  # Python環境のセットアップ（ドキュメント生成スクリプト用）
+          uses: "actions/setup-python@v4"
+        - name: "Install Dependencies"  # ドキュメント生成に必要な依存関係をインストール
+          run: "pip install -r mcp-server/requirements.txt"
+        - name: "Run Doc Generator"  # 独自のドキュメント生成スクリプトを実行
+          run: "python mcp-server/scripts/generate_docs.py"  # （例：コードからYAMLドキュメント生成）
+        - name: "Commit Documentation"  # 生成されたドキュメントをリポジトリにコミット
+          uses: "EndBug/add-and-commit@v9"
+          with:
+            message: "docs: 自動生成されたドキュメントを更新 [skip ci]"
+            add: "generated_contexts/*.md"
+            push: true    - issues (新しいIssueの作成時、または割り当て時など)
+    # - issue_comment (Issueへのコメントで@claude言及時など、必要なら追加)
+  jobs:
+    - name: "AI Issue Triage"  # AIによるIssueトリアージジョブ
+      runs-on: "ubuntu-latest"
+      permissions:
+        issues: write        # Issueへコメントやラベル付与を行う権限4
+        contents: read       # リポジトリ内容を参照する権限（問題内容に応じコード参照時）
+      steps:
+        - name: "Checkout code"  # コードをチェックアウト（Issue内容に関連するコード確認のため）
+          uses: "actions/checkout@v4"
+        - name: "Set up Bun runtime"  # Claude実行環境のセットアップ（Bun）
+          uses: "oven-sh/setup-bun@v2"
+        - name: "Run Claude Code Action (Issue Processing)"  # ClaudeによるIssue処理実行
+          uses: "anthropics/claude-code-action@v1"
+          with:
+            anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+            github_token: ${{ secrets.GITHUB_TOKEN }}
+            # （例: 特定ラベル付与や返信テンプレートのプロンプト設定が可能）
+
+documentation_generation:
+  # コード変更に応じてドキュメントを自動生成・更新するワークフロー5
+  purpose: "リポジトリ内のドキュメント（YAML/Markdown）をコード変更に合わせ自動更新する"
+  triggers:
+    - push (mainブランチへのプッシュ時にドキュメント更新)
+    # - schedule (定期実行によるドキュメントチェックも可能)
+  jobs:
+    - name: "Generate Docs"  # ドキュメント自動生成ジョブ
+      runs-on: "ubuntu-latest"
+      permissions:
+        contents: write   # リポジトリ内容の更新権限（生成したドキュメントをコミットするため）
+      steps:
+        - name: "Checkout code"  # リポジトリのコードをチェックアウト
+          uses: "actions/checkout@v4"
+        - name: "Set up Python"  # Python環境のセットアップ（ドキュメント生成スクリプト用）
+          uses: "actions/setup-python@v4"
+        - name: "Install Dependencies"  # ドキュメント生成に必要な依存関係をインストール
+          run: "pip install -r mcp-server/requirements.txt"
+        - name: "Run Doc Generator"  # 独自のドキュメント生成スクリプトを実行
+          run: "python mcp-server/scripts/generate_docs.py"  # （例：コードからYAMLドキュメント生成）
+        - name: "Commit Documentation"  # 生成されたドキュメントをリポジトリにコミット
+          uses: "EndBug/add-and-commit@v9"
+          with:
+            message: "docs: 自動生成されたドキュメントを更新 [skip ci]"
+            add: "generated_contexts/*.md"
+            push: true:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v4
+
+      # Runs a single command using the runners shell
+      - name: Run a one-line script
+        run: echo Hello, world!
+
+      # Runs a set of commands using the runners shell
+      - name: Run a multi-line script
+        run: |
+          echo Add other actions to build,
+          echo test, and deploy your project.
